@@ -1,25 +1,40 @@
-# Qwen Edit - RunPod Serverless API
+# Qwen Edit & Generate - RunPod Serverless API
 
-A RunPod serverless API for AI-powered product placement in room images using Qwen models and PyTorch.
+A smart dual-API RunPod serverless service for AI-powered product placement using Qwen models and PyTorch. Supports both editing products into real rooms and generating new environments with products.
 
 ## 🚀 Features
 
-- **AI-Powered Placement**: Uses Qwen models to intelligently place products in room images
+### Edit API - Product in Real Room
+- **AI-Powered Placement**: Uses Qwen models to intelligently place products in real room images
 - **Room Analysis**: Automatically detects floors, walls, and furniture for optimal placement
 - **Custom Instructions**: Accepts natural language instructions for placement preferences
 - **Realistic Rendering**: Adds shadows and proper scaling for realistic product placement
+
+### Generate API - Product in Generated Environment
+- **Environment Generation**: Creates new room environments based on instructions
+- **Smart Placement**: Places products in generated environments with proper context
+- **Multiple Room Types**: Supports living room, bedroom, office, and custom environments
+- **Creative Control**: Full control over environment style and product placement
+
+### Smart Architecture
+- **Single Endpoint**: Cost-efficient RunPod deployment with action-based routing
+- **Shared Utilities**: Common image processing and validation functions
+- **Production Ready**: Clean, organized, and scalable codebase
 - **RunPod Optimized**: Built specifically for RunPod serverless deployment
 
 ## 📁 Project Structure
 
 ```
-├── rp_handler.py          # Main RunPod serverless handler
-├── qwen_edit_service.py   # Core Qwen Edit service with PyTorch
-├── requirements.txt       # Python dependencies
-├── Dockerfile            # Docker configuration for RunPod
-├── test_input.json       # Test input for local testing
-├── DEPLOYMENT.md         # Step-by-step deployment guide
-└── README.md             # This file
+├── rp_handler.py              # Main RunPod handler (routes to edit/gen)
+├── qwen_edit_service.py       # Edit API: Product in real room
+├── qwen_gen_service.py        # Generate API: Product in generated environment
+├── shared_utils.py            # Common utilities (image processing, validation)
+├── requirements.txt           # Python dependencies
+├── Dockerfile                # Docker configuration for RunPod
+├── test_deployment.json      # Health check test file
+├── .gitignore               # Git ignore rules
+├── DEPLOYMENT.md            # Step-by-step deployment guide
+└── README.md                # This file
 ```
 
 ## 🛠️ Quick Start
@@ -43,14 +58,14 @@ Follow the detailed deployment guide in [DEPLOYMENT.md](DEPLOYMENT.md):
 
 1. **Build Docker Image**:
    ```bash
-   docker build --platform linux/amd64 --tag [YOUR_USERNAME]/qwen-edit-serverless .
-   docker push [YOUR_USERNAME]/qwen-edit-serverless:latest
+   docker build --platform linux/amd64 --tag [YOUR_USERNAME]/qwen-dual-api-serverless .
+   docker push [YOUR_USERNAME]/qwen-dual-api-serverless:latest
    ```
 
 2. **Deploy Endpoint**:
    - Go to [RunPod Console](https://console.runpod.io) → Serverless
    - Click "New Endpoint" → "Import from Docker Registry"
-   - Container Image: `docker.io/[YOUR_USERNAME]/qwen-edit-serverless:latest`
+   - Container Image: `docker.io/[YOUR_USERNAME]/qwen-dual-api-serverless:latest`
    - GPU: 16GB+ recommended
    - Timeout: 300 seconds
 
@@ -68,72 +83,153 @@ Follow the detailed deployment guide in [DEPLOYMENT.md](DEPLOYMENT.md):
 POST https://your-endpoint-id-0-0-0-0.runpod.net
 ```
 
-### Request Format
+### 1. Edit API - Product in Real Room
+
+**Request Format:**
 ```json
 {
   "input": {
-    "room_image": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...",
+    "action": "edit",
     "product_image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
+    "room_image": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...",
     "instructions": "Place the product on the floor near the window",
     "placement_coordinates": [400, 300]
   }
 }
 ```
 
-### Response Format
+**Response Format:**
 ```json
 {
   "success": true,
-  "result": {
-    "success": true,
-    "processed_image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
-    "placement_info": {
-      "location": [400, 300],
-      "type": "floor",
-      "product_size": [120, 150],
-      "room_analysis": {...}
-    },
+  "action": "edit",
+  "processed_image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
+  "placement_info": {
+    "instructions": "Place the product on the floor near the window",
+    "coordinates": [400, 300],
     "processing_time": 2.45
+  },
+  "processing_time": 2.45
+}
+```
+
+### 2. Generate API - Product in Generated Environment
+
+**Request Format:**
+```json
+{
+  "input": {
+    "action": "generate",
+    "product_image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
+    "instructions": "Create a modern living room and place the product near a window",
+    "environment_type": "living_room"
   }
+}
+```
+
+**Response Format:**
+```json
+{
+  "success": true,
+  "action": "generate",
+  "processed_image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
+  "generation_info": {
+    "instructions": "Create a modern living room and place the product near a window",
+    "environment_type": "living_room",
+    "processing_time": 3.12
+  },
+  "processing_time": 3.12
+}
+```
+
+### 3. Health Check
+
+**Request Format:**
+```json
+{
+  "input": {
+    "action": "health_check"
+  }
+}
+```
+
+**Response Format:**
+```json
+{
+  "status": "healthy",
+  "service": "qwen-edit-generate-api",
+  "version": "2.0.0",
+  "actions": ["edit", "generate", "health_check"],
+  "gpu_available": true,
+  "gpu_count": 1
 }
 ```
 
 ### Parameters
 
+#### Edit API Parameters
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `room_image` | string | Yes | Base64 encoded room image |
+| `action` | string | Yes | Must be "edit" |
 | `product_image` | string | Yes | Base64 encoded product image |
+| `room_image` | string | Yes | Base64 encoded room image |
 | `instructions` | string | No | Natural language placement instructions |
 | `placement_coordinates` | array | No | Specific [x, y] coordinates for placement |
+
+#### Generate API Parameters
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `action` | string | Yes | Must be "generate" |
+| `product_image` | string | Yes | Base64 encoded product image |
+| `instructions` | string | No | Environment and placement instructions |
+| `environment_type` | string | No | Type of environment (living_room, bedroom, office) |
 
 ## 🔧 Technical Details
 
 ### Models Used
-- **Qwen-VL-Chat**: For understanding room layouts and placement instructions
+- **Qwen2-VL-2B-Instruct**: For understanding room layouts, placement instructions, and environment generation
 - **PyTorch**: For image processing and model inference
-- **OpenCV**: For computer vision tasks (edge detection, contour analysis)
+- **Transformers**: For loading and running Qwen models
+
+### Architecture
+- **Smart Routing**: Single endpoint with action-based request handling
+- **Service Separation**: Dedicated services for edit and generate operations
+- **Shared Utilities**: Common image processing, validation, and encoding functions
+- **Error Handling**: Comprehensive error handling and validation
 
 ### Image Processing Pipeline
-1. **Room Analysis**: Detects floors, walls, furniture, and lighting
-2. **Placement Zone Identification**: Finds suitable areas for product placement
-3. **Instruction Processing**: Interprets natural language placement preferences
-4. **Product Scaling**: Resizes product to appropriate scale for room context
-5. **Realistic Rendering**: Adds shadows and proper compositing
-6. **Result Generation**: Returns processed image with placement metadata
+
+#### Edit API Pipeline
+1. **Input Validation**: Validates product and room images
+2. **Room Analysis**: Detects floors, walls, furniture, and lighting
+3. **Placement Zone Identification**: Finds suitable areas for product placement
+4. **Instruction Processing**: Interprets natural language placement preferences
+5. **Product Scaling**: Resizes product to appropriate scale for room context
+6. **Realistic Rendering**: Adds shadows and proper compositing
+7. **Result Generation**: Returns processed image with placement metadata
+
+#### Generate API Pipeline
+1. **Input Validation**: Validates product image and instructions
+2. **Environment Generation**: Creates new room environment based on type and instructions
+3. **Product Placement**: Places product in generated environment with proper context
+4. **Style Matching**: Ensures product matches environment style
+5. **Result Generation**: Returns generated image with environment metadata
 
 ### Performance
 - **Processing Time**: 2-5 seconds per request (depending on image size and GPU)
 - **Memory Usage**: ~8-12GB VRAM for model loading
 - **Concurrent Requests**: Supports multiple simultaneous requests
+- **Scalability**: Single endpoint design allows efficient resource utilization
 
-## 🎯 Shopify Integration
+## 🎯 Integration Examples
+
+### Shopify Integration
 
 To integrate with Shopify:
 
 1. **Create Shopify App**: Use the Shopify CLI to create a new app
-2. **Add Product Button**: Add a "Try in Room" button to product pages
-3. **Frontend Integration**: Use the provided HTML interface or build your own
+2. **Add Product Buttons**: Add "Try in Room" and "Generate Environment" buttons to product pages
+3. **Frontend Integration**: Build your own interface or use existing templates
 4. **API Calls**: Make requests to your RunPod endpoint from your Shopify app
 
 Example Shopify app structure:
@@ -143,10 +239,42 @@ shopify-app/
 │   ├── frontend/
 │   │   └── pages/
 │   │       └── products/
-│   │           └── [id].tsx    # Product page with "Try in Room" button
+│   │           └── [id].tsx    # Product page with both buttons
 │   └── api/
-│       └── qwen-edit/
+│       └── qwen-dual-api/
 │           └── route.ts        # API route to call RunPod endpoint
+```
+
+### JavaScript Integration Example
+
+```javascript
+// Edit API - Product in Real Room
+const editResponse = await fetch('https://your-endpoint-id-0-0-0-0.runpod.net', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    input: {
+      action: "edit",
+      product_image: productImageBase64,
+      room_image: roomImageBase64,
+      instructions: "Place the product on the floor near the window"
+    }
+  })
+});
+
+// Generate API - Product in Generated Environment
+const generateResponse = await fetch('https://your-endpoint-id-0-0-0-0.runpod.net', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    input: {
+      action: "generate",
+      product_image: productImageBase64,
+      instructions: "Create a modern living room and place the product near a window",
+      environment_type: "living_room"
+    }
+  })
+});
 ```
 
 ## 🔍 Troubleshooting

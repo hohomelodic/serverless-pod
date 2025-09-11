@@ -1,6 +1,6 @@
 # RunPod Serverless Deployment Guide
 
-This guide will walk you through deploying your Qwen Edit API to RunPod Serverless.
+This guide will walk you through deploying your smart dual-API Qwen Edit & Generate service to RunPod Serverless.
 
 ## Prerequisites
 
@@ -26,9 +26,7 @@ venv\Scripts\activate
 ### 1.2 Install Dependencies
 ```bash
 # Install RunPod SDK
-
-
-
+pip install runpod
 
 # Install other dependencies
 pip install -r requirements.txt
@@ -43,8 +41,8 @@ python rp_handler.py
 
 You should see output similar to:
 ```
---- Starting Serverless Worker |  Version 1.7.9 ---
-INFO   | Using test_input.json as job input.
+--- Starting Serverless Worker |  Version 1.7.13 ---
+INFO   | Using test_deployment.json as job input.
 DEBUG  | Retrieved local job: {'input': {'action': 'health_check'}, 'id': 'local_test'}
 INFO   | local_test | Started.
 Worker Start
@@ -53,14 +51,29 @@ Processing completed successfully
 INFO   | Job local_test completed successfully.
 ```
 
-### 2.2 Test with Image Processing
-Create a test file `test_image_input.json`:
+### 2.2 Test Both APIs
+The service supports two main actions:
+
+**Edit API Test:**
 ```json
 {
     "input": {
-        "room_image": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...",
+        "action": "edit",
         "product_image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
+        "room_image": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...",
         "instructions": "Place the product on the floor near the window"
+    }
+}
+```
+
+**Generate API Test:**
+```json
+{
+    "input": {
+        "action": "generate",
+        "product_image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
+        "instructions": "Create a modern living room and place the product near a window",
+        "environment_type": "living_room"
     }
 }
 ```
@@ -71,12 +84,12 @@ Create a test file `test_image_input.json`:
 Replace `[YOUR_USERNAME]` with your Docker Hub username:
 
 ```bash
-docker build --platform linux/amd64 --tag [YOUR_USERNAME]/qwen-edit-serverless .
+docker build --platform linux/amd64 --tag [YOUR_USERNAME]/qwen-dual-api-serverless .
 ```
 
 ### 3.2 Push to Docker Hub
 ```bash
-docker push [YOUR_USERNAME]/qwen-edit-serverless:latest
+docker push [YOUR_USERNAME]/qwen-dual-api-serverless:latest
 ```
 
 ## Step 4: Deploy to RunPod
@@ -88,7 +101,7 @@ docker push [YOUR_USERNAME]/qwen-edit-serverless:latest
 4. Click **Import from Docker Registry**
 
 ### 4.2 Configure Endpoint
-- **Container Image**: `docker.io/[YOUR_USERNAME]/qwen-edit-serverless:latest`
+- **Container Image**: `docker.io/[YOUR_USERNAME]/qwen-dual-api-serverless:latest`
 - **Endpoint Type**: Queue
 - **GPU Configuration**: 
   - Check **16 GB GPUs** (recommended for Qwen models)
@@ -125,15 +138,30 @@ curl -X POST https://your-endpoint-id-0-0-0-0.runpod.net \
   }'
 ```
 
-### 5.3 Test Image Processing
+### 5.3 Test Edit API
 ```bash
 curl -X POST https://your-endpoint-id-0-0-0-0.runpod.net \
   -H "Content-Type: application/json" \
   -d '{
     "input": {
-      "room_image": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...",
+      "action": "edit",
       "product_image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
-      "instructions": "Place the product on the floor"
+      "room_image": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...",
+      "instructions": "Place the product on the floor near the window"
+    }
+  }'
+```
+
+### 5.4 Test Generate API
+```bash
+curl -X POST https://your-endpoint-id-0-0-0-0.runpod.net \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": {
+      "action": "generate",
+      "product_image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
+      "instructions": "Create a modern living room and place the product near a window",
+      "environment_type": "living_room"
     }
   }'
 ```
@@ -141,24 +169,36 @@ curl -X POST https://your-endpoint-id-0-0-0-0.runpod.net \
 ## Step 6: Integration with Shopify
 
 ### 6.1 Frontend Integration
-Use the provided `shopify_app.html` file or integrate the API calls into your Shopify app:
+Integrate both APIs into your Shopify app:
 
 ```javascript
-const response = await fetch('https://your-endpoint-id-0-0-0-0.runpod.net', {
+// Edit API - Product in Real Room
+const editResponse = await fetch('https://your-endpoint-id-0-0-0-0.runpod.net', {
   method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
     input: {
-      room_image: roomImageBase64,
+      action: "edit",
       product_image: productImageBase64,
+      room_image: roomImageBase64,
       instructions: userInstructions
     }
   })
 });
 
-const result = await response.json();
+// Generate API - Product in Generated Environment
+const generateResponse = await fetch('https://your-endpoint-id-0-0-0-0.runpod.net', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    input: {
+      action: "generate",
+      product_image: productImageBase64,
+      instructions: environmentInstructions,
+      environment_type: "living_room"
+    }
+  })
+});
 ```
 
 ### 6.2 Shopify App Structure
@@ -168,9 +208,9 @@ shopify-app/
 │   ├── frontend/
 │   │   └── pages/
 │   │       └── products/
-│   │           └── [id].tsx    # Product page with "Try in Room" button
+│   │           └── [id].tsx    # Product page with both "Try in Room" and "Generate Environment" buttons
 │   └── api/
-│       └── qwen-edit/
+│       └── qwen-dual-api/
 │           └── route.ts        # API route to call RunPod endpoint
 ```
 
