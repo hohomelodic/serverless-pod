@@ -12,11 +12,25 @@ from qwen_edit_service import QwenEditService
 from qwen_gen_service import QwenGenService
 from shared_utils import decode_base64_image, encode_image_to_base64, validate_image_input
 
-# Initialize services
-print("Initializing Qwen services...")
-edit_service = QwenEditService()
-gen_service = QwenGenService()
-print("Qwen services initialized successfully!")
+# Global services - will be loaded lazily on first request
+edit_service = None
+gen_service = None
+
+def load_services():
+    """Load Qwen services lazily on first request"""
+    global edit_service, gen_service
+    
+    if edit_service is None:
+        print("Loading Qwen Edit service...")
+        edit_service = QwenEditService()
+        print("Edit service loaded successfully!")
+    
+    if gen_service is None:
+        print("Loading Qwen Generate service...")
+        gen_service = QwenGenService()
+        print("Generate service loaded successfully!")
+    
+    return edit_service, gen_service
 
 def process_edit_request(job_input: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -33,6 +47,9 @@ def process_edit_request(job_input: Dict[str, Any]) -> Dict[str, Any]:
         Dictionary with processed image and metadata
     """
     try:
+        # Load services lazily
+        edit_svc, _ = load_services()
+        
         # Validate required inputs
         validate_image_input(job_input.get("product_image"), "product_image")
         validate_image_input(job_input.get("room_image"), "room_image")
@@ -49,7 +66,7 @@ def process_edit_request(job_input: Dict[str, Any]) -> Dict[str, Any]:
         room_image = decode_base64_image(room_image_b64)
         
         # Process with Edit service
-        result = edit_service.place_product_in_room(
+        result = edit_svc.place_product_in_room(
             room_image=room_image,
             product_image=product_image,
             instructions=instructions,
@@ -84,12 +101,15 @@ def process_generate_request(job_input: Dict[str, Any]) -> Dict[str, Any]:
         job_input: Dictionary containing:
             - product_image: Base64 encoded product image
             - instructions: Text instructions for environment and placement
-            - environment_type: Type of environment to generate
+            - output_size: Optional custom output dimensions
     
     Returns:
         Dictionary with generated image and metadata
     """
     try:
+        # Load services lazily
+        _, gen_svc = load_services()
+        
         # Validate required inputs
         validate_image_input(job_input.get("product_image"), "product_image")
         
@@ -102,7 +122,7 @@ def process_generate_request(job_input: Dict[str, Any]) -> Dict[str, Any]:
         product_image = decode_base64_image(product_image_b64)
         
         # Process with Generate service
-        result = gen_service.generate_product_environment(
+        result = gen_svc.generate_product_environment(
             product_image=product_image,
             instructions=instructions,
             output_size=output_size
