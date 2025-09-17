@@ -1,7 +1,6 @@
 FROM python:3.10-slim
 
-# Set the working directory in the container
-WORKDIR /app
+WORKDIR /
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -12,11 +11,18 @@ RUN apt-get update && apt-get install -y \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the current directory contents into the container
-COPY . /app
+# Install Python dependencies
+RUN pip install --no-cache-dir runpod
 
-# Install any needed packages specified in requirements.txt
+# Copy requirements and install additional dependencies
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Run the application
-CMD ["python", "rp_handler.py"]
+# Copy your handler files
+COPY rp_handler.py /
+COPY qwen_edit_service.py /
+COPY qwen_gen_service.py /
+COPY shared_utils.py /
+
+# Start the container
+CMD ["python3", "-u", "rp_handler.py"]
