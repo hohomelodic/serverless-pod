@@ -42,6 +42,7 @@ def process_edit_request(job_input: Dict[str, Any]) -> Dict[str, Any]:
         room_image_b64 = job_input.get("room_image")
         instructions = job_input.get("instructions", "")
         placement_coordinates = job_input.get("placement_coordinates")
+        # Note: Edit API uses original room image size, no custom output_size
         
         # Decode images
         product_image = decode_base64_image(product_image_b64)
@@ -95,7 +96,7 @@ def process_generate_request(job_input: Dict[str, Any]) -> Dict[str, Any]:
         # Extract parameters
         product_image_b64 = job_input.get("product_image")
         instructions = job_input.get("instructions", "")
-        environment_type = job_input.get("environment_type", "living_room")
+        output_size = job_input.get("output_size")
         
         # Decode image
         product_image = decode_base64_image(product_image_b64)
@@ -104,7 +105,7 @@ def process_generate_request(job_input: Dict[str, Any]) -> Dict[str, Any]:
         result = gen_service.generate_product_environment(
             product_image=product_image,
             instructions=instructions,
-            environment_type=environment_type
+            output_size=output_size
         )
         
         if result.get("error"):
