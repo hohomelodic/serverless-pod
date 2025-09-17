@@ -20,8 +20,8 @@ class QwenEditService:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         logger.info(f"Using device: {self.device}")
         
-        # Use Qwen2-VL model for product placement
-        self.model_name = "Qwen/Qwen2-VL-2B-Instruct"
+        # Use full Qwen2-VL model for intelligent product placement
+        self.model_name = "Qwen/Qwen2-VL-2B-Instruct"  # Full AI model for smart placement
         self.tokenizer = None
         self.model = None
         self.processor = None
