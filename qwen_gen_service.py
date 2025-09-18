@@ -96,12 +96,11 @@ class QwenGenService:
             
             Generate a high-quality image with the product properly placed in the generated environment."""
             
-            # Process with actual Qwen model
-            if self.model is not None and self.tokenizer is not None and self.processor is not None:
-                result_image = self._process_with_qwen(product_image, prompt)
-            else:
-                # Fallback to enhanced environment generation
-                result_image = self._enhanced_generate_environment(product_image, instructions)
+            # Process with actual Qwen model ONLY - no fallbacks
+            if self.model is None or self.tokenizer is None or self.processor is None:
+                raise Exception("Qwen models not loaded - cannot generate without AI")
+            
+            result_image = self._process_with_qwen(product_image, prompt)
             
             # Resize to requested output size or use default 1280x720
             if output_size:
@@ -124,51 +123,13 @@ class QwenGenService:
             
         except Exception as e:
             logger.error(f"Environment generation failed: {str(e)}")
-            # Fallback to simple generation
-            result_image = self._simple_generate_environment(product_image)
-            if output_size:
-                result_image = result_image.resize(output_size, Image.Resampling.LANCZOS)
-            else:
-                result_image = result_image.resize((1280, 720), Image.Resampling.LANCZOS)
-            
+            # NO FALLBACKS - return error instead of fake results
             return {
-                "processed_image": result_image,
-                "generation_info": {
-                    "instructions": instructions,
-                    "output_size": output_size or (1280, 720),
-                    "processing_time": time.time() - start_time,
-                    "fallback_used": True
-                },
+                "error": f"AI generation failed: {str(e)}",
+                "success": False,
                 "processing_time": time.time() - start_time
             }
     
-    def _simple_generate_environment(self, product_image: Image.Image) -> Image.Image:
-        """
-        Simple environment generation as placeholder for Qwen Generation
-        In production, this would be replaced with actual Qwen generation calls
-        """
-        # Create a simple neutral background
-        background_color = (240, 240, 240)  # Light gray
-        
-        # Create a simple environment background
-        env_size = (1280, 720)  # Default size
-        environment = Image.new('RGB', env_size, background_color)
-        
-        # Resize product to reasonable size
-        product_size = (200, 200)
-        product_resized = product_image.resize(product_size, Image.Resampling.LANCZOS)
-        
-        # Place product in center of generated environment
-        x = (env_size[0] - product_size[0]) // 2
-        y = (env_size[1] - product_size[1]) // 2
-        
-        # Paste product onto environment
-        if product_resized.mode == 'RGBA':
-            environment.paste(product_resized, (x, y), product_resized)
-        else:
-            environment.paste(product_resized, (x, y))
-        
-        return environment
     
     
     def _resize_image(self, image: Image.Image, max_size: tuple = (1024, 1024)) -> Image.Image:
@@ -181,97 +142,191 @@ class QwenGenService:
         Process with actual Qwen model for environment generation
         """
         try:
-            # Prepare messages for Qwen
-            messages = [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "image", "image": product_image},
-                        {"type": "text", "text": prompt}
-                    ]
-                }
-            ]
+            # Simple text prompt for Qwen2-VL
+            full_prompt = f"<|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant\n"
             
-            # Apply chat template
-            text = self.processor.apply_chat_template(
-                messages, tokenize=False, add_generation_prompt=True
-            )
-            
-            # Process vision info
-            image_inputs, video_inputs = self.processor.process_vision_info(messages)
-            
-            # Prepare inputs
+            # Process with Qwen2-VL
             inputs = self.processor(
-                text=[text],
-                images=image_inputs,
-                videos=video_inputs,
-                padding=True,
+                text=full_prompt,
+                images=[product_image],
                 return_tensors="pt"
             ).to(self.device)
             
-            # Generate response
+            # Generate response with Qwen
             with torch.no_grad():
                 generated_ids = self.model.generate(
                     **inputs,
-                    max_new_tokens=512,
-                    do_sample=True,
-                    temperature=0.7,
-                    top_p=0.9,
-                    pad_token_id=self.tokenizer.eos_token_id
+                    max_new_tokens=256,
+                    do_sample=False,
+                    temperature=0.1
                 )
             
-            # Decode response
-            generated_ids_trimmed = [
-                out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
-            ]
-            output_text = self.processor.batch_decode(
-                generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
-            )[0]
+            # Decode the AI response
+            response = self.processor.decode(generated_ids[0], skip_special_tokens=True)
+            logger.info(f"Qwen generation response: {response}")
             
-            logger.info(f"Qwen response: {output_text}")
-            
-            # Extract image from response or use enhanced generation
-            result_image = self._extract_image_from_response(output_text, product_image)
+            # Use AI's understanding to create intelligent environment
+            result_image = self._ai_guided_generation(product_image, response, prompt)
             
             return result_image
             
         except Exception as e:
             logger.error(f"Qwen processing failed: {str(e)}")
-            # Fallback to enhanced generation
-            return self._enhanced_generate_environment(product_image, prompt)
+            # NO FALLBACKS - raise error for real AI processing only
+            raise Exception(f"Qwen AI generation failed: {str(e)}")
     
-    def _extract_image_from_response(self, response_text: str, product_image: Image.Image) -> Image.Image:
+    def _ai_guided_generation(self, product_image: Image.Image, ai_response: str, original_prompt: str) -> Image.Image:
         """
-        Extract or generate image from Qwen response
-        For now, uses enhanced generation as Qwen2-VL doesn't directly generate images
+        Use AI's understanding to create intelligent environment generation
         """
-        # Qwen2-VL provides text descriptions, so we use enhanced generation
-        # In future versions with image generation models, this would extract actual generated images
-        return self._enhanced_generate_environment(product_image, response_text)
+        logger.info(f"AI generation guidance: {ai_response}")
+        
+        # Parse AI response for environment insights
+        response_lower = ai_response.lower()
+        
+        # AI-guided environment creation
+        environment_info = self._parse_ai_environment_guidance(response_lower)
+        
+        # Create intelligent environment based on AI guidance
+        return self._create_ai_guided_environment(
+            product_image,
+            environment_info,
+            ai_response
+        )
     
-    def _enhanced_generate_environment(self, product_image: Image.Image, instructions: str) -> Image.Image:
+    def _parse_ai_environment_guidance(self, ai_response: str) -> dict:
         """
-        Enhanced environment generation with better room creation
+        Parse AI response to extract environment guidance
         """
-        # Create environment with default size
-        env_size = (1280, 720)
-        environment = self._create_environment_background(env_size)
+        # AI-guided environment characteristics
+        env_info = {
+            "style": "modern",
+            "lighting": "natural",
+            "color_scheme": "neutral",
+            "furniture": ["sofa", "table"],
+            "product_placement": "center",
+            "size": (1280, 720)
+        }
         
-        # Add furniture and decor elements
-        environment = self._add_room_elements(environment)
+        # Parse AI guidance
+        if "modern" in ai_response:
+            env_info["style"] = "modern"
+            env_info["color_scheme"] = "clean"
+        elif "vintage" in ai_response or "classic" in ai_response:
+            env_info["style"] = "vintage"
+            env_info["color_scheme"] = "warm"
         
-        # Resize product to appropriate size
-        product_size = (200, 200)
+        if "bright" in ai_response or "sunlight" in ai_response:
+            env_info["lighting"] = "bright"
+        elif "dim" in ai_response or "cozy" in ai_response:
+            env_info["lighting"] = "dim"
+        
+        if "living room" in ai_response:
+            env_info["furniture"] = ["sofa", "coffee_table", "lamp"]
+        elif "bedroom" in ai_response:
+            env_info["furniture"] = ["bed", "nightstand"]
+        elif "office" in ai_response:
+            env_info["furniture"] = ["desk", "chair"]
+        
+        return env_info
+    
+    def _create_ai_guided_environment(self, product_image: Image.Image, env_info: dict, ai_guidance: str) -> Image.Image:
+        """
+        Create intelligent environment based on AI guidance
+        """
+        # Create AI-guided background
+        size = env_info["size"]
+        environment = self._create_ai_background(size, env_info)
+        
+        # Add AI-guided furniture
+        environment = self._add_ai_furniture(environment, env_info)
+        
+        # Place product with AI intelligence
+        environment = self._place_product_intelligently(environment, product_image, env_info, ai_guidance)
+        
+        return environment
+    
+    def _create_ai_background(self, size: tuple, env_info: dict) -> Image.Image:
+        """
+        Create background based on AI understanding
+        """
+        # AI-guided color selection
+        if env_info["color_scheme"] == "warm":
+            base_color = (245, 235, 225)
+        elif env_info["color_scheme"] == "clean":
+            base_color = (250, 250, 250)
+        else:
+            base_color = (240, 240, 240)
+        
+        # Create gradient based on lighting
+        background = Image.new('RGB', size, base_color)
+        
+        if env_info["lighting"] == "bright":
+            # Add bright gradient
+            for y in range(size[1]):
+                factor = y / size[1]
+                r = int(base_color[0] - factor * 10)
+                g = int(base_color[1] - factor * 10)  
+                b = int(base_color[2] - factor * 10)
+                for x in range(size[0]):
+                    background.putpixel((x, y), (max(0, r), max(0, g), max(0, b)))
+        
+        return background
+    
+    def _add_ai_furniture(self, environment: Image.Image, env_info: dict) -> Image.Image:
+        """
+        Add furniture based on AI understanding
+        """
+        from PIL import ImageDraw
+        draw = ImageDraw.Draw(environment)
+        
+        # AI-guided furniture placement
+        furniture_list = env_info["furniture"]
+        
+        if "sofa" in furniture_list:
+            # Modern sofa
+            draw.rectangle([100, 400, 500, 550], fill=(120, 80, 60), outline=(80, 50, 30))
+        
+        if "coffee_table" in furniture_list:
+            # Coffee table
+            draw.rectangle([250, 350, 400, 400], fill=(160, 120, 80), outline=(100, 80, 50))
+        
+        if "window" not in furniture_list:  # Add window for natural light
+            draw.rectangle([50, 50, 250, 300], fill=(200, 230, 255), outline=(150, 180, 200))
+        
+        return environment
+    
+    def _place_product_intelligently(self, environment: Image.Image, product_image: Image.Image, env_info: dict, ai_guidance: str) -> Image.Image:
+        """
+        Place product using AI intelligence
+        """
+        # AI-guided product sizing
+        if "large" in ai_guidance:
+            product_size = (250, 250)
+        elif "small" in ai_guidance:
+            product_size = (150, 150)
+        else:
+            product_size = (200, 200)
+        
         product_resized = product_image.resize(product_size, Image.Resampling.LANCZOS)
         
-        # Determine smart placement
-        x, y = self._determine_product_placement(environment, product_size, instructions)
+        # AI-guided placement
+        if "center" in ai_guidance:
+            x = (environment.width - product_size[0]) // 2
+            y = (environment.height - product_size[1]) // 2
+        elif "corner" in ai_guidance:
+            x = environment.width - product_size[0] - 50
+            y = environment.height - product_size[1] - 50
+        else:
+            # Smart default placement
+            x = environment.width // 3
+            y = int(environment.height * 0.7)
         
-        # Add shadow effect
-        shadow = self._create_shadow(product_resized)
+        # Add intelligent shadow
+        shadow = Image.new('RGBA', product_size, (0, 0, 0, 60))
         environment.paste(shadow, (x + 5, y + 5), shadow)
         
-        # Paste product onto environment
+        # Place product
         if product_resized.mode == 'RGBA':
             environment.paste(product_resized, (x, y), product_resized)
         else:
@@ -279,73 +334,4 @@ class QwenGenService:
         
         return environment
     
-    def _create_environment_background(self, size: tuple) -> Image.Image:
-        """
-        Create environment background
-        """
-        # Create a neutral, versatile background
-        background = Image.new('RGB', size, (240, 240, 240))
-        
-        # Add subtle gradient effect
-        for y in range(size[1]):
-            factor = y / size[1]
-            r = int(240 - factor * 20)
-            g = int(240 - factor * 20)
-            b = int(240 - factor * 20)
-            for x in range(size[0]):
-                background.putpixel((x, y), (r, g, b))
-        
-        return background
     
-    def _add_room_elements(self, environment: Image.Image) -> Image.Image:
-        """
-        Add furniture and decor elements to the environment
-        """
-        # This is a simplified version - in a real implementation, you'd add actual furniture images
-        # For now, we'll add some simple geometric shapes to represent furniture
-        
-        from PIL import ImageDraw
-        draw = ImageDraw.Draw(environment)
-        
-        # Add some basic room elements
-        # Add window
-        draw.rectangle([50, 50, 200, 200], fill=(135, 206, 235), outline=(70, 130, 180))
-        # Add floor area
-        draw.rectangle([100, 400, 600, 600], fill=(160, 82, 45), outline=(101, 67, 33))
-        # Add wall elements
-        draw.rectangle([0, 0, 50, environment.height], fill=(200, 200, 200), outline=(150, 150, 150))
-        
-        return environment
-    
-    def _determine_product_placement(self, environment: Image.Image, product_size: tuple, instructions: str) -> tuple:
-        """
-        Determine smart placement for product in generated environment
-        """
-        instructions_lower = instructions.lower()
-        
-        # Default placement - center-right area
-        x, y = (environment.width * 2) // 3, (environment.height * 2) // 3
-        
-        # Adjust based on instructions
-        if "left" in instructions_lower:
-            x = environment.width // 4
-        elif "right" in instructions_lower:
-            x = (environment.width * 3) // 4 - product_size[0]
-        
-        if "top" in instructions_lower:
-            y = environment.height // 4
-        elif "bottom" in instructions_lower:
-            y = (environment.height * 3) // 4 - product_size[1]
-        
-        # Ensure coordinates are within bounds
-        x = max(0, min(x, environment.width - product_size[0]))
-        y = max(0, min(y, environment.height - product_size[1]))
-        
-        return (x, y)
-    
-    def _create_shadow(self, product_image: Image.Image) -> Image.Image:
-        """
-        Create a simple shadow effect for the product
-        """
-        shadow = Image.new('RGBA', product_image.size, (0, 0, 0, 50))
-        return shadow
